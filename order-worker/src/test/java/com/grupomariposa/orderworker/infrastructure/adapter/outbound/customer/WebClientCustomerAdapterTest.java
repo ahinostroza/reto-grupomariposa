@@ -2,6 +2,7 @@ package com.grupomariposa.orderworker.infrastructure.adapter.outbound.customer;
 
 import com.grupomariposa.orderworker.domain.exception.CustomerNotFoundException;
 import com.grupomariposa.orderworker.infrastructure.config.EnrichmentConfig;
+import com.grupomariposa.orderworker.infrastructure.config.ResilienceProperties;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import org.junit.jupiter.api.AfterEach;
@@ -27,8 +28,8 @@ class WebClientCustomerAdapterTest {
         WebClient webClient = WebClient.builder().baseUrl(server.url("/").toString()).build();
         adapter = new WebClientCustomerAdapter(
                 webClient,
-                EnrichmentConfig.breaker("customer-test"),
-                EnrichmentConfig.retry("customer-test"));
+                EnrichmentConfig.breaker("customer-test", ResilienceProperties.defaults()),
+                EnrichmentConfig.retry("customer-test", ResilienceProperties.defaults()));
     }
 
     @AfterEach

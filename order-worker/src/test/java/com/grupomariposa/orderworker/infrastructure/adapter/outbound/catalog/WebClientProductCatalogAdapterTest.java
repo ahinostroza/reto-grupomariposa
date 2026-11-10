@@ -2,6 +2,7 @@ package com.grupomariposa.orderworker.infrastructure.adapter.outbound.catalog;
 
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.grupomariposa.orderworker.infrastructure.config.EnrichmentConfig;
+import com.grupomariposa.orderworker.infrastructure.config.ResilienceProperties;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import org.junit.jupiter.api.AfterEach;
@@ -27,8 +28,8 @@ class WebClientProductCatalogAdapterTest {
         WebClient webClient = WebClient.builder().baseUrl(server.url("/").toString()).build();
         adapter = new WebClientProductCatalogAdapter(
                 webClient,
-                EnrichmentConfig.breaker("catalog-test"),
-                EnrichmentConfig.retry("catalog-test"),
+                EnrichmentConfig.breaker("catalog-test", ResilienceProperties.defaults()),
+                EnrichmentConfig.retry("catalog-test", ResilienceProperties.defaults()),
                 Caffeine.newBuilder().maximumSize(100).build());
     }
 

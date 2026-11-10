@@ -242,7 +242,9 @@ Algunas cosas que decidí a propósito y por qué:
   adaptador (con circuit breaker por servicio, para que una caída del catálogo no
   afecte al de clientes). El consumidor solo reintenta lo que el adaptador no cubre,
   como la contención de lock. Los errores de negocio (un 404, un mensaje mal
-  formado) no se reintentan nunca.
+  formado) no se reintentan nunca. El máximo de reintentos, el tiempo de espera
+  (backoff) y los umbrales del circuit breaker son configurables desde
+  `application.yml` o variables de entorno.
 - **El lock es por `orderId`.** El enunciado mezcla "clientes bloqueados" con "el
   mismo pedido"; el requisito de correctitud es no procesar dos veces el mismo
   pedido, así que bloqueo por `orderId`. Serializar por cliente es otra cosa, más

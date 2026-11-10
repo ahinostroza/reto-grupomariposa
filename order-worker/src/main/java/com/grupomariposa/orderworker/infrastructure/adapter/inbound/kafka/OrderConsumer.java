@@ -102,7 +102,7 @@ public class OrderConsumer {
         Timer.Sample sample = Timer.start(meterRegistry);
         return parse(record)
                 .flatMap(command -> useCase.process(command)
-                        .retryWhen(Retry.backoff(properties.maxRetries(), Duration.ofMillis(200))
+                        .retryWhen(Retry.backoff(properties.maxRetries(), properties.retryBackoff())
                                 .filter(OrderConsumer::isRetryable))
                         .doOnNext(result -> {
                             log.info("order {} processed: {}", command.orderId(), result);

@@ -2,13 +2,16 @@ package com.grupomariposa.orderworker.infrastructure.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+import java.time.Duration;
+
 @ConfigurationProperties(prefix = "kafka")
 public record KafkaProperties(
         String bootstrapServers,
         String topic,
         String dltTopic,
         String groupId,
-        int maxRetries) {
+        int maxRetries,
+        Duration retryBackoff) {
 
     public KafkaProperties {
         if (bootstrapServers == null) {
@@ -25,6 +28,9 @@ public record KafkaProperties(
         }
         if (maxRetries <= 0) {
             maxRetries = 3;
+        }
+        if (retryBackoff == null) {
+            retryBackoff = Duration.ofMillis(200);
         }
     }
 }

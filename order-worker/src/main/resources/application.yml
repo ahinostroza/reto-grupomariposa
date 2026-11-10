@@ -11,7 +11,16 @@ server:
 enrichment:
   catalog-base-url: ${CATALOG_BASE_URL:http://localhost:8081}
   customer-base-url: ${CUSTOMER_BASE_URL:http://localhost:8082}
-  request-timeout: 2s
+  request-timeout: ${ENRICH_REQUEST_TIMEOUT:2s}
+  # Retry (exponential backoff) and circuit breaker for the HTTP calls to the Go APIs.
+  resilience:
+    retry-max-attempts: ${ENRICH_RETRY_MAX_ATTEMPTS:3}
+    retry-backoff: ${ENRICH_RETRY_BACKOFF:200ms}
+    retry-backoff-multiplier: ${ENRICH_RETRY_MULTIPLIER:2.0}
+    breaker-sliding-window: ${ENRICH_BREAKER_WINDOW:20}
+    breaker-failure-rate-threshold: ${ENRICH_BREAKER_FAILURE_RATE:50}
+    breaker-wait-in-open-state: ${ENRICH_BREAKER_WAIT_OPEN:10s}
+    breaker-slow-call-threshold: ${ENRICH_BREAKER_SLOW_CALL:2s}
 
 kafka:
   bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
@@ -19,6 +28,7 @@ kafka:
   dlt-topic: ${KAFKA_DLT_TOPIC:orders.DLT}
   group-id: ${KAFKA_GROUP_ID:order-worker}
   max-retries: ${WORKER_MAX_RETRIES:3}
+  retry-backoff: ${WORKER_RETRY_BACKOFF:200ms}
 
 redisson:
   url: ${REDIS_URL:redis://localhost:6379}

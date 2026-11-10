@@ -26,26 +26,33 @@ import java.time.Duration;
 /**
  * Composition root for the enrichment adapters. Each downstream service gets its
  * own circuit breaker and retry, so a failure in the catalog never trips the
- * breaker protecting the customer service (bulkheading by dependency).
+ * breaker protecting the customer service (bulkheading by dependency). The retry
+ * and breaker tunables come from {@link ResilienceProperties}.
  */
 @Configuration
-@EnableConfigurationProperties(EnrichmentProperties.class)
+@EnableConfigurationProperties({EnrichmentProperties.class, ResilienceProperties.class})
 public class EnrichmentConfig {
 
     @Bean
-    ProductCatalogPort productCatalogPort(WebClient.Builder builder, EnrichmentProperties props) {
+    ProductCatalogPort productCatalogPort(WebClient.Builder builder,
+                                          EnrichmentProperties props,
+                                          ResilienceProperties resilience) {
         WebClient client = client(builder, props.catalogBaseUrl(), props.requestTimeout());
         Cache<String, Product> cache = Caffeine.newBuilder()
                 .maximumSize(10_000)
                 .expireAfterWrite(Duration.ofMinutes(5))
                 .build();
-        return new WebClientProductCatalogAdapter(client, breaker("catalog"), retry("catalog"), cache);
+        return new WebClientProductCatalogAdapter(
+                client, breaker("catalog", resilience), retry("catalog", resilience), cache);
     }
 
     @Bean
-    CustomerPort customerPort(WebClient.Builder builder, EnrichmentProperties props) {
+    CustomerPort customerPort(WebClient.Builder builder,
+                              EnrichmentProperties props,
+                              ResilienceProperties resilience) {
         WebClient client = client(builder, props.customerBaseUrl(), props.requestTimeout());
-        return new WebClientCustomerAdapter(client, breaker("customer"), retry("customer"));
+        return new WebClientCustomerAdapter(
+                client, breaker("customer", resilience), retry("customer", resilience));
     }
 
     private static WebClient client(WebClient.Builder builder, String baseUrl, Duration timeout) {
@@ -57,24 +64,24 @@ public class EnrichmentConfig {
     }
 
     /** Retry only transient failures: business errors and open-breaker calls are ignored. */
-    public static Retry retry(String name) {
+    public static Retry retry(String name, ResilienceProperties p) {
         RetryConfig config = RetryConfig.custom()
-                .maxAttempts(3)
+                .maxAttempts(p.retryMaxAttempts())
                 .intervalFunction(IntervalFunction.ofExponentialRandomBackoff(
-                        Duration.ofMillis(200), 2.0, 0.5))
+                        p.retryBackoff(), p.retryBackoffMultiplier(), 0.5))
                 .ignoreExceptions(BusinessValidationException.class, CallNotPermittedException.class)
                 .build();
         return Retry.of(name, config);
     }
 
     /** Business failures (e.g. 404) must not count towards opening the breaker. */
-    public static CircuitBreaker breaker(String name) {
+    public static CircuitBreaker breaker(String name, ResilienceProperties p) {
         CircuitBreakerConfig config = CircuitBreakerConfig.custom()
-                .slidingWindowSize(20)
-                .failureRateThreshold(50)
+                .slidingWindowSize(p.breakerSlidingWindow())
+                .failureRateThreshold(p.breakerFailureRateThreshold())
                 .slowCallRateThreshold(50)
-                .slowCallDurationThreshold(Duration.ofSeconds(2))
-                .waitDurationInOpenState(Duration.ofSeconds(10))
+                .slowCallDurationThreshold(p.breakerSlowCallThreshold())
+                .waitDurationInOpenState(p.breakerWaitInOpenState())
                 .ignoreExceptions(BusinessValidationException.class)
                 .build();
         return CircuitBreaker.of(name, config);
