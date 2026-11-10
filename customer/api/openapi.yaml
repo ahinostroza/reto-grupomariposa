@@ -1,0 +1,116 @@
+openapi: 3.1.0
+info:
+  title: Customer API
+  version: 1.0.0
+  description: >
+    Read-only customer service for order enrichment. This service owns customer
+    data and lifecycle status: no other service reads or writes its datastore
+    directly. Consumers integrate strictly through this contract (contract-first).
+  contact:
+    name: Grupo Mariposa Platform
+
+servers:
+  - url: http://localhost:8082
+    description: Local development
+
+tags:
+  - name: customers
+    description: Customer lookups
+
+paths:
+  /v1/customers/{customerId}:
+    get:
+      operationId: getCustomer
+      summary: Fetch a customer by id
+      tags: [customers]
+      parameters:
+        - $ref: '#/components/parameters/TraceParent'
+        - name: customerId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1 }
+        - name: If-None-Match
+          in: header
+          required: false
+          description: Conditional request; the server returns 304 when the ETag matches.
+          schema: { type: string }
+      responses:
+        '200':
+          description: Customer found.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { $ref: '#/components/headers/CacheControl' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Customer' }
+        '304':
+          description: Not modified (ETag matched); body is empty.
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+components:
+  parameters:
+    TraceParent:
+      name: traceparent
+      in: header
+      required: false
+      description: W3C Trace Context header for distributed tracing propagation.
+      schema: { type: string }
+
+  headers:
+    ETag:
+      description: Entity tag for conditional requests and client-side caching.
+      schema: { type: string }
+    CacheControl:
+      description: >
+        Caching policy. Shorter TTL than the catalog because customer status
+        (e.g. a block) must take effect quickly.
+      schema: { type: string, example: "public, max-age=60" }
+
+  responses:
+    BadRequest:
+      description: Malformed request.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    NotFound:
+      description: Customer does not exist. Business outcome — consumers must NOT retry.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    ServiceUnavailable:
+      description: Transient dependency failure. Safe to retry with exponential backoff.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+    Customer:
+      type: object
+      required: [customerId, name, status]
+      properties:
+        customerId: { type: string, example: "customer-456" }
+        name:       { type: string, example: "Ada Lovelace" }
+        email:      { type: string, format: email, example: "ada@example.com" }
+        status:
+          type: string
+          enum: [ACTIVE, BLOCKED, INACTIVE]
+          description: >
+            ACTIVE: may place orders. BLOCKED: temporarily barred.
+            INACTIVE: deactivated account. The worker accepts ACTIVE only.
+          example: ACTIVE
+
+    Problem:
+      type: object
+      description: RFC 7807 problem detail (application/problem+json).
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+          example: "https://errors.grupomariposa.com/customer-not-found"
+        title:    { type: string, example: "Customer not found" }
+        status:   { type: integer, example: 404 }
+        detail:   { type: string, example: "Customer 'customer-456' does not exist." }
+        instance: { type: string, example: "/v1/customers/customer-456" }
