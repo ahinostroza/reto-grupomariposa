@@ -1,0 +1,32 @@
+# Java / Maven / Gradle
+odd/
+target/
+build/
+.gradle/
+*.class
+*.jar
+!**/gradle/wrapper/gradle-wrapper.jar
+hs_err_pid*
+
+# Go
+bin/
+*.exe
+*.test
+*.out
+vendor/
+
+# IDE / editors
+.idea/
+*.iml
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env / secrets
+.atl
+.env
+!.env.example
+*.local
