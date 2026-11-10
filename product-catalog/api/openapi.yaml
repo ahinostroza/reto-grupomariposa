@@ -1,0 +1,169 @@
+openapi: 3.1.0
+info:
+  title: Product Catalog API
+  version: 1.0.0
+  description: >
+    Read-only catalog service for order enrichment. This service owns product
+    data: no other service reads or writes its datastore directly. Consumers
+    integrate strictly through this contract (contract-first).
+  contact:
+    name: Grupo Mariposa Platform
+
+servers:
+  - url: http://localhost:8081
+    description: Local development
+
+tags:
+  - name: products
+    description: Product catalog lookups
+
+paths:
+  /v1/products/{productId}:
+    get:
+      operationId: getProduct
+      summary: Fetch a single product by id
+      tags: [products]
+      parameters:
+        - $ref: '#/components/parameters/TraceParent'
+        - name: productId
+          in: path
+          required: true
+          schema: { type: string, minLength: 1 }
+        - name: If-None-Match
+          in: header
+          required: false
+          description: Conditional request; the server returns 304 when the ETag matches.
+          schema: { type: string }
+      responses:
+        '200':
+          description: Product found.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Cache-Control: { $ref: '#/components/headers/CacheControl' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Product' }
+        '304':
+          description: Not modified (ETag matched); body is empty.
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+  /v1/products:batchGet:
+    post:
+      operationId: batchGetProducts
+      summary: Fetch multiple products in a single call (non-mutating)
+      description: >
+        Custom method (Google AIP-231). POST only carries a request body; this
+        operation is safe and does not mutate state. Returns the resolved
+        products plus the ids that do not exist (partial success). It never
+        responds 404 for the whole batch when only some ids are missing.
+      tags: [products]
+      parameters:
+        - $ref: '#/components/parameters/TraceParent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BatchGetProductsRequest' }
+      responses:
+        '200':
+          description: Batch resolved. Inspect `notFound` for missing ids.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BatchGetProductsResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+
+components:
+  parameters:
+    TraceParent:
+      name: traceparent
+      in: header
+      required: false
+      description: W3C Trace Context header for distributed tracing propagation.
+      schema: { type: string }
+
+  headers:
+    ETag:
+      description: Entity tag for conditional requests and client-side caching.
+      schema: { type: string }
+    CacheControl:
+      description: Caching policy for read-heavy catalog data.
+      schema: { type: string, example: "public, max-age=300" }
+
+  responses:
+    BadRequest:
+      description: Malformed request (e.g. empty id, batch too large).
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    NotFound:
+      description: Resource does not exist. Business outcome — consumers must NOT retry.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    ServiceUnavailable:
+      description: Transient dependency failure. Safe to retry with exponential backoff.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+    Product:
+      type: object
+      required: [productId, name, price, currency, active]
+      properties:
+        productId:   { type: string, example: "product-789" }
+        name:        { type: string, example: "Laptop" }
+        description: { type: string, example: "14-inch ultrabook, 16GB RAM" }
+        price:
+          type: integer
+          format: int64
+          description: Price in minor units (e.g. cents). Never a floating-point number.
+          example: 99900
+        currency:
+          type: string
+          description: ISO 4217 currency code.
+          example: "USD"
+        active:
+          type: boolean
+          description: Whether the product is currently sellable.
+
+    BatchGetProductsRequest:
+      type: object
+      required: [ids]
+      properties:
+        ids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          description: Product ids to resolve in a single round trip.
+          items: { type: string, minLength: 1 }
+
+    BatchGetProductsResponse:
+      type: object
+      required: [products, notFound]
+      properties:
+        products:
+          type: array
+          items: { $ref: '#/components/schemas/Product' }
+        notFound:
+          type: array
+          description: Requested ids that do not exist in the catalog.
+          items: { type: string }
+
+    Problem:
+      type: object
+      description: RFC 7807 problem detail (application/problem+json).
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+          example: "https://errors.grupomariposa.com/product-not-found"
+        title:    { type: string, example: "Product not found" }
+        status:   { type: integer, example: 404 }
+        detail:   { type: string, example: "Product 'product-789' does not exist." }
+        instance: { type: string, example: "/v1/products/product-789" }
